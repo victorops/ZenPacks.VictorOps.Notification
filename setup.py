@@ -4,8 +4,8 @@
 # NB: PACKAGES is deprecated
 NAME = "ZenPacks.VictorOps.Notification"
 VERSION = "1.0.0dev"
-AUTHOR = "Your Name Here"
-LICENSE = ""
+AUTHOR = "VictorOps"
+LICENSE = "All Rights Reserved"
 NAMESPACE_PACKAGES = ['ZenPacks', 'ZenPacks.VictorOps']
 PACKAGES = ['ZenPacks', 'ZenPacks.VictorOps', 'ZenPacks.VictorOps.Notification']
 INSTALL_REQUIRES = ['ZenPacks.zenoss.ZenPackLib']

@@ -1,1 +1,28 @@
 name: ZenPacks.VictorOps.Notification
+
+# zProperties:
+#   DEFAULTS:
+#     category: VictorOps
+#   zVictorOpsEnable: {}
+#   zVictorOpsApiKey: {}
+#   zVictorOpsRoutingKey: {}
+#   zVictorOpsMonitorName: {}
+# classes:
+#   VictorOpsDevice:
+#     base: [zenpacklib.Device]
+#     label: VictorOps
+#   VictorOpsComponent:
+#     base: [zenpacklib.Component]
+#     properties:
+#       vo_api_key:
+#         label: VictorOps API Key
+#       vo_routing_key:
+#         label: VictorOps Routing Key
+#       vo_monitor_name:
+#         label: VictorOps Monitor Name
+# class_relationships:
+#   - VictorOpsDevice 1:MC VictorOpsComponent
+# device_classes:
+#   /VictorOps:
+#     zProperties:
+#       zPythonClass: ZenPacks.VictorOps.Notification.VictorOps.py
