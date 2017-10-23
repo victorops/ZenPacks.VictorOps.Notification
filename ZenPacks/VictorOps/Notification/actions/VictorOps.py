@@ -7,76 +7,60 @@
 #// disclosed or reproduced without the express written permission of        //
 #// VictorOps, Inc.                                                          //
 #//==========================================================================//
-import os
-import re
-from time import time, strftime
-import tempfile
 import json
 import logging
-import Globals
+import urllib2
+import requests
+from time import time
+
+from ZenPacks.VictorOps.Notification.interfaces import \
+    IVictorOpsEnqueueContentInfo
 from zope.interface import implements
-from Products.ZenUtils.guid.guid import GUIDManager
+
+import Globals
+from Products.ZenModel.actions import (ActionExecutionException, IActionBase,
+                                       _signalToContextDict)
 from Products.ZenModel.interfaces import IAction
-from Products.ZenModel.actions import IActionBase, ActionExecutionException, _signalToContextDict
+from Products.ZenUtils.guid.guid import GUIDManager
+from zenoss.protocols.protobufs.zep_pb2 import (SEVERITY_ERROR,
+                                                SEVERITY_WARNING,
+                                                STATUS_ACKNOWLEDGED)
 
-from ZenPacks.VictorOps.Notification.lib.VictorOps import sendVOAlert
-
-from zenoss.protocols.protobufs.zep_pb2 import (
-    SEVERITY_CLEAR, SEVERITY_INFO, SEVERITY_DEBUG,
-    SEVERITY_WARNING, SEVERITY_ERROR, SEVERITY_CRITICAL,
-    STATUS_NEW, STATUS_ACKNOWLEDGED, STATUS_SUPPRESSED, STATUS_CLOSED,
-    STATUS_CLEARED, STATUS_DROPPED, STATUS_AGED
-)
-# SEVERITY_CLEAR = 0;
-# SEVERITY_DEBUG = 1;
-# SEVERITY_INFO = 2;
-# SEVERITY_WARNING = 3;
-# SEVERITY_ERROR = 4;
-# SEVERITY_CRITICAL = 5;
-# STATUS_NEW = 0;
-# STATUS_ACKNOWLEDGED = 1;
-# STATUS_SUPPRESSED = 2;
-# STATUS_CLOSED = 3; // Closed by the user.
-# STATUS_CLEARED = 4; // Closed by a matching clear event.
-# STATUS_DROPPED = 5; // Dropped via a transform.
-# STATUS_AGED = 6; // Closed via automatic aging.
-
-from ZenPacks.VictorOps.Notification.interfaces import IVictorOpsEnqueueContentInfo
-
-log = logging.getLogger("zen.victorops.actions")
-
-def parseKVP(p):
-    a = p.partition('=')
-    return a[0], a[2]
+log = logging.getLogger("zen.VictorOps.actions")
 
 class VictorOpsEnqueueAction(IActionBase):
     implements(IAction)
+
+    log.info("Initializing VictorOps")
 
     id = 'victorops_enqueue'
     name = 'VictorOps Alert'
     actionContentInfo = IVictorOpsEnqueueContentInfo
     shouldExecuteInBatch = False
 
+    def __init__(self):
+        log.info("VictorOps Init")
+        super(VictorOpsEnqueueAction, self).__init__()
+
     def setupAction(self, dmd):
+        log.info("VictorOps Setup Action")
         self.guidManager = GUIDManager(dmd)
+        self.dmd = dmd
 
     def execute(self, notification, signal):
-        log.debug('---------------------------------------------------------------------')
-        log.debug(signal)
+        log.info('---------------------------------------------------------------------')
+        log.info("Signal: %s" % signal)
+        self.setupAction(notification.dmd)
 
-        data = _signalToContextDict(signal, '', notification, self.guidManager)
+        data = _signalToContextDict(signal, self.options.get('zopeurl'), notification, self.guidManager)
         log.debug(data)
+
         eventSummary = data['eventSummary']
         evt = data['evt']
-
-        # Early bail out if it looks like this incident has been acked/resolved via VictorOps
-        for note in eventSummary.notes:
-            if signal.clear and re.match("^RECOVER.*\(via VictorOps\)$", note.message):
-                log.info('Not forwarding recovery that originated at VictorOps: %s', note.message)
-                return
-            if evt.eventState == STATUS_ACKNOWLEDGED and re.match("^ACKNOWLEDGE.*\(via VictorOps\)$", note.message):
-                log.info('Not forwarding acknowledgement that originated at VictorOps: %s', note.message)
-                return
+        api_key = notification.content['api_key']
+        routing_key = notification.content['routing_key']
+        base_url = "https://alert.victorops.com/integrations/generic/20131114/alert/%s" % api_key
+        api_url = base_url + "/%s" % routing_key if (routing_key) else base_url
 
         alertDetails = dict()
         alertDetails['monitoring_tool'] = 'zenoss'
@@ -117,8 +101,17 @@ class VictorOpsEnqueueAction(IActionBase):
         alertDetails['VO_ROUTING_KEY'] = notification.content['routing_key']
         alertDetails['monitor_name'] = notification.content.get('monitor_name', '')
 
-        sendVOAlert(alertDetails)
-        log.info(json.dumps(alertDetails))
+        headers = {'Content-Type': 'application/json'}
+        body = json.dumps(alertDetails)
+        req = urllib2.Request(url=api_url, data=body, headers={'Content-Type': 'application/json'})
+        log.debug(body)
+
+        try:
+            r = requests.post(url=api_url, data=body, headers={'Content-Type': 'application/json'})
+        except requests.exceptions.RequestException as e:
+            err = "Failed to send alert to VictorOps: %s" % e
+            log.warn(err)
+            raise ActionExecutionException(err)
 
     def updateContent(self, content=None, data=None):
         content['api_key'] = data.get('api_key')
